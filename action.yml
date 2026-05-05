@@ -1,0 +1,134 @@
+name: "Free Disk Space"
+description: "Free up disk space on GitHub-hosted Ubuntu runners by removing preinstalled toolchains and caches."
+author: "seventwo-studio"
+branding:
+  icon: "trash-2"
+  color: "blue"
+
+inputs:
+  android:
+    description: "Remove the Android SDK and NDK (~9 GB)."
+    required: false
+    default: "true"
+  dotnet:
+    description: "Remove the .NET runtime and SDKs (~1.6 GB)."
+    required: false
+    default: "true"
+  haskell:
+    description: "Remove GHC and Haskell tooling (~5.2 GB)."
+    required: false
+    default: "true"
+  large-packages:
+    description: "Remove large apt packages (Azure CLI, Google Cloud SDK, PowerShell, Firefox, Chromium, MongoDB, MySQL, MS SQL tools)."
+    required: false
+    default: "true"
+  docker-images:
+    description: "Prune all Docker images."
+    required: false
+    default: "true"
+  tool-cache:
+    description: "Remove the runner tool cache at $AGENT_TOOLSDIRECTORY (Python, Node, Go, Ruby preinstalls). Aggressive — only enable if you don't use setup-* actions that read from it."
+    required: false
+    default: "false"
+  swap-storage:
+    description: "Disable and remove the swap file (~4 GB)."
+    required: false
+    default: "true"
+  verbose:
+    description: "Print disk usage before and after each step."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Show disk usage (before)
+      if: inputs.verbose == 'true'
+      shell: bash
+      run: |
+        echo "::group::Disk usage before cleanup"
+        df -h /
+        echo "::endgroup::"
+
+    - name: Remove Android SDK/NDK
+      if: inputs.android == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove Android"
+        sudo rm -rf /usr/local/lib/android || true
+        echo "::endgroup::"
+
+    - name: Remove .NET
+      if: inputs.dotnet == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove .NET"
+        sudo rm -rf /usr/share/dotnet || true
+        echo "::endgroup::"
+
+    - name: Remove Haskell
+      if: inputs.haskell == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove Haskell"
+        sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+        echo "::endgroup::"
+
+    - name: Remove tool cache
+      if: inputs.tool-cache == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove tool cache"
+        sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+        echo "::endgroup::"
+
+    - name: Remove large apt packages
+      if: inputs.large-packages == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove large apt packages"
+        # Apt-get purge is slow — group purges into one transaction and skip
+        # packages that aren't installed (|| true) so a missing one doesn't fail.
+        sudo apt-get update -qq || true
+        sudo apt-get purge -yq --auto-remove \
+          '^aspnetcore-.*' \
+          '^dotnet-.*' \
+          '^llvm-.*' \
+          '^mongodb-.*' \
+          '^mysql-.*' \
+          azure-cli \
+          firefox \
+          google-chrome-stable \
+          google-cloud-cli \
+          google-cloud-sdk \
+          mono-devel \
+          powershell || true
+        sudo apt-get autoremove -yq || true
+        sudo apt-get clean -yq || true
+        echo "::endgroup::"
+
+    - name: Prune Docker images
+      if: inputs.docker-images == 'true'
+      shell: bash
+      run: |
+        echo "::group::Prune Docker images"
+        sudo docker image prune --all --force || true
+        echo "::endgroup::"
+
+    - name: Remove swap storage
+      if: inputs.swap-storage == 'true'
+      shell: bash
+      run: |
+        echo "::group::Remove swap"
+        sudo swapoff -a || true
+        sudo rm -f /mnt/swapfile /swapfile || true
+        free -h || true
+        echo "::endgroup::"
+
+    - name: Show disk usage (after)
+      if: inputs.verbose == 'true'
+      shell: bash
+      run: |
+        echo "::group::Disk usage after cleanup"
+        df -h /
+        echo "::endgroup::"
