@@ -1,6 +1,6 @@
 name: "Free Disk Space"
 description: "Free up disk space on GitHub-hosted Ubuntu runners by removing preinstalled toolchains and caches."
-author: "seventwo-studio"
+author: "lucasilverentand"
 branding:
   icon: "trash-2"
   color: "blue"
